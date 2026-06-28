@@ -17,6 +17,7 @@ dependencies = [
 dev = [
     "briefcase>=0.4.2",
     "briefcasex-slint>=1.17.0b2",
+    "slint-dev>=1.17.0b2",
 ]
 
 [tool.uv]
@@ -51,3 +52,6 @@ requires = [
     "numpy>=2.0",
     "httpx>=0.28",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

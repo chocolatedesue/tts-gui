@@ -3,87 +3,63 @@
 ## Project Location
 `/Users/ccds/tmp/tts_gui`
 
-## GitHub
-https://github.com/chocolatedesue/tts-gui
-
 ## What Was Built
 
 A desktop TTS app using **Slint (Python bindings)** + **edge-tts** + **miniaudio/sounddevice** for playback.
 
-### Current Architecture
+### Current Architecture (Post-Refactor)
 ```
 src/tts_gui/
-├── ui.slint          # Slint UI (sidebar + synth page + settings page + player bar + toast)
-├── app.py            # Python logic (TTSApp class, all callbacks)
-├── icons/mic.svg     # Sidebar icon
-├── icons/settings.svg
+├── app.py            # 薄协调层 (~230 lines)
+├── audio_player.py   # 播放模块（线程安全，Lock 保护）
+├── tts_engine.py     # TTS + LLM 合成模块
+├── task_runner.py    # 异步任务调度（per-task queue）
+├── settings.py       # 配置 schema + load/save/apply/capture
+├── history.py        # 历史记录管理（index.json + mp3）
+├── ui.slint          # Slint UI 定义
+├── icons/            # Lucide 风格 SVG 图标
 ├── __init__.py
 └── __main__.py
+tests/
+├── test_task_runner.py
+├── test_settings.py
+├── test_tts_engine.py
+├── test_history.py
+└── test_audio_player.py
 ```
 
 ### Key Tech Decisions
-- **Rendering**: Slint's 21MB native Rust .so does all rendering via Skia+Metal (GPU). Python is FFI-only.
-- **Thread safety**: Worker threads NEVER touch `win.*`. All UI updates via Timer polling + shared `_result` variable.
-- **Config**: `~/.config/tts-gui/settings.json` stores LLM API key/url/model, TTS params, device selection.
-- **Packaging**: Briefcase → macOS .app (157MB, embeds CPython 3.13 + all deps).
-- **Icons**: SVG files with `colorize` for theme adaptation (emoji renders as □ in Slint).
+- **模块化：** TTSApp 从 490 行单文件重构为 5 个独立模块 + 薄协调层
+- **线程安全：** AudioPlayer 用 threading.Lock 保护 current_frame；TaskRunner 用 per-task Queue 替代共享 _result
+- **Seek bug 修复：** _updating_progress 守卫防止 slider 双向绑定反馈循环
+- **计时显示：** Toast 中展示 "清洗 Xs + 生成 Ys"
+- **保存音频：** osascript choose file name 弹出原生保存对话框（worker 线程执行）
+- **Icons:** Lucide SVG，colorize 适配主题
+- **Config:** `~/.config/tts-gui/settings.json`
+- **History:** `~/.config/tts-gui/history/` (index.json + mp3, max 50)
+- **Packaging:** Briefcase → macOS .app
 
 ### Installed Skills
-- `.agents/skills/slint/` — Slint language, layout, polish, gotchas, MCP server, viewer screenshots
-- `.agents/skills/to-prd/`, `to-issues/`, `implement/`, `review/` — engineering workflow
-
-## What's Done
-- ✅ Left-right text panels (original | cleaned) with LLM cleaning via gemini-3.5-flash
-- ✅ Voice browser (322 voices, lang/gender filter, preview)
-- ✅ Bottom player bar (play/pause, stop, progress slider, time, volume, speed)
-- ✅ Settings page (LLM config, TTS params, audio device)
-- ✅ SVG sidebar icons
-- ✅ Toast notification system
-- ✅ Window freely resizable
-- ✅ Default zh-CN voices
-- ✅ Accent-colored Generate button
-- ✅ Installed to /Applications/Edge TTS.app
-
-## What's Next (Unfinished)
-
-### 1. Visual Design Improvement (HIGH PRIORITY)
-Current UI is functional but lacks polish/beauty. Needs:
-- Research good TTS/audio app UIs (Descript, ElevenLabs desktop, Voice Memos)
-- Better color palette, spacing rhythm, subtle shadows/borders
-- More refined player bar (progress bar styling, proper iconography)
-- Consider custom theme global with curated colors
-
-### 2. Loop Playback + Default 1.5x Speed
-- Add loop toggle button (🔁) to player bar
-- Default speed = 1.5x
-- Loop: auto-restart from beginning when playback ends
-
-### 3. Stability
-- The app has crashed before due to cross-thread access (abort() on Thread 18)
-- Current fix: Timer polling. But need to audit ALL paths where worker might touch UI.
-- The save dialog uses `osascript` on macOS (tkinter crashes from threads)
-
-## Key Files to Read First
-1. `docs/PRD-v2-ui-redesign.md` — full requirements
-2. `docs/ADR-001-ui-redesign.md` — design decisions from grill session
-3. `src/tts_gui/ui.slint` — current UI definition
-4. `src/tts_gui/app.py` — current Python logic
-5. `.agents/skills/slint/reference/polish.md` — Slint visual polish checklist
+- `.agents/skills/slint/` — Slint 开发
+- `.agents/skills/e2e-mcp-test/` — MCP E2E 测试流程
 
 ## Commands
 ```bash
 cd /Users/ccds/tmp/tts_gui
-uv run python src/tts_gui/app.py          # Run dev
+uv run python -m tts_gui                   # Run dev
+uv run pytest tests/ -q                    # Unit tests (31)
 slint-viewer --check src/tts_gui/ui.slint  # Compile check
-slint-viewer --screenshot out.png src/tts_gui/ui.slint  # Headless screenshot
-slint-viewer --auto-reload src/tts_gui/ui.slint  # Live preview
 
 # Build & install
-uv run briefcase create macOS && uv run briefcase build macOS
+uv run briefcase update macOS && uv run briefcase build macOS
 cp -R "build/tts-gui/macos/app/Edge TTS.app" /Applications/
+codesign --force --deep --sign - "/Applications/Edge TTS.app"
+
+# MCP debug
+SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=9315 uv run python -m tts_gui
 ```
 
-## LLM API (local config only, not in git)
-- URL: https://gemini-web2api.588345.xyz/v1
-- Model: gemini-3.5-flash
-- Config: ~/.config/tts-gui/settings.json
+## Known Issues
+- `cp -R` .app bundle 后必须 `codesign --force --deep --sign -` 重新签名
+- Slint 不渲染 emoji（显示为□），需用 SVG + colorize 或设置 font-family: "Apple Color Emoji"
+- tkinter 在 Slint 进程中会 crash（NSInvalidArgumentException），不能用作文件对话框

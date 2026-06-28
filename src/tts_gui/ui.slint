@@ -1,65 +1,126 @@
 import { Button, ComboBox, Slider, VerticalBox, HorizontalBox, TextEdit, Switch, Palette, LineEdit, GroupBox, GridBox, ScrollView } from "std-widgets.slint";
 
+struct HistoryItem { title: string, subtitle: string }
+
+// ─── Theme global ──────────────────────────────────────────────────────────────
+export global Theme {
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    // Spacing scale (multiples of 4px)
+    out property <length> sp-xs: 4px;
+    out property <length> sp-sm: 8px;
+    out property <length> sp-md: 12px;
+    out property <length> sp-lg: 16px;
+    out property <length> sp-xl: 24px;
+    // Radii
+    out property <length> radius-sm: 4px;
+    out property <length> radius-md: 8px;
+    out property <length> radius-lg: 12px;
+    // Colors derived from Palette
+    out property <brush> bg: Palette.background;
+    out property <brush> surface: Palette.alternate-background;
+    out property <brush> fg: Palette.foreground;
+    out property <brush> fg-secondary: Palette.foreground.transparentize(0.45);
+    out property <brush> accent: Palette.accent-background;
+    out property <brush> accent-fg: Palette.accent-foreground;
+    out property <brush> border: Palette.border;
+    out property <brush> control-bg: Palette.control-background;
+    // Font sizes
+    out property <length> fs-caption: 11.2px;
+    out property <length> fs-body: 14px;
+    // Label column
+    out property <length> label-col: 56px;
+    // Sizes
+    out property <length> icon-sm: 18px;
+    out property <length> icon-md: 22px;
+    out property <length> player-bar-height: 56px;
+    out property <length> sidebar-width: 52px;
+}
+
+// ─── Icon button component ─────────────────────────────────────────────────────
+component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: Theme.icon-md;
+    in property <bool> enabled: true;
+    in property <bool> active: false;
+    in property <brush> active-color: Theme.accent;
+    callback clicked();
+
+    width: 32px;
+    height: 32px;
+    border-radius: Theme.radius-sm;
+    background: !enabled ? transparent : ta.has-hover ? Theme.control-bg : transparent;
+    opacity: enabled ? 1.0 : 0.35;
+    animate background { duration: 150ms; }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+    Image {
+        source: icon;
+        width: icon-size;
+        height: icon-size;
+        colorize: active ? active-color : Theme.fg;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
+// ─── Nav item ──────────────────────────────────────────────────────────────────
 component NavItem inherits Rectangle {
     in property <image> icon;
     in property <string> label;
     in property <bool> active;
     callback clicked();
-    height: 4.5rem;
-    background: active ? Palette.accent-background : ta.has-hover ? Palette.control-background : transparent;
+    width: 40px;
+    height: 40px;
+    background: active ? Theme.accent : ta.has-hover ? Theme.control-bg : transparent;
     animate background { duration: 150ms; }
-    border-radius: 6px;
+    border-radius: Theme.radius-md;
     ta := TouchArea { clicked => { root.clicked(); } mouse-cursor: pointer; }
-    VerticalLayout {
-        alignment: center;
-        spacing: 4px;
-        Image {
-            source: icon;
-            width: 24px;
-            height: 24px;
-            colorize: active ? Palette.accent-foreground : Palette.foreground;
-            horizontal-alignment: center;
-        }
-        Text {
-            text: label;
-            font-size: 0.75rem;
-            color: active ? Palette.accent-foreground : Palette.foreground;
-            font-weight: active ? 700 : 400;
-            horizontal-alignment: center;
-        }
+    Image {
+        source: icon;
+        width: 22px;
+        height: 22px;
+        colorize: active ? Theme.accent-fg : Theme.fg;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
     }
 }
 
+// ─── Param row ─────────────────────────────────────────────────────────────────
 component ParamRow inherits HorizontalLayout {
     in property <string> label;
     in-out property <float> param-value;
     in property <string> unit: "%";
-    spacing: 8px;
-    Text { text: label; vertical-alignment: center; min-width: 40px; }
+    spacing: Theme.sp-md;
+    Text { text: label; vertical-alignment: center; min-width: Theme.label-col; color: Theme.fg; }
     Slider { minimum: -50; maximum: 50; value <=> param-value; horizontal-stretch: 1; }
     Text {
         text: param-value >= 0 ? "+" + Math.round(param-value) + unit : Math.round(param-value) + unit;
-        vertical-alignment: center; min-width: 50px;
+        vertical-alignment: center; min-width: 50px; color: Theme.fg-secondary; font-size: Theme.fs-caption;
     }
 }
 
+// ─── Main Window ───────────────────────────────────────────────────────────────
 export component MainWindow inherits Window {
     title: "Edge TTS 语音合成";
-    background: Palette.background;
+    background: Theme.bg;
     min-width: 700px;
     min-height: 500px;
     preferred-width: 920px;
     preferred-height: 640px;
-    default-font-size: 15px;
+    default-font-size: 14px;
 
-    // State
+    // ── State ──
     in-out property <int> current-page: 0;
     in-out property <bool> generating: false;
     in-out property <bool> has-audio: false;
     in-out property <bool> playing: false;
     in-out property <string> status: "就绪";
 
-    // Synth page
+    // ── Synth page ──
     in-out property <string> cleaned-text: "";
     in-out property <bool> clean-enabled: true;
     in-out property <[string]> lang-list: ["全部"];
@@ -68,7 +129,7 @@ export component MainWindow inherits Window {
     in-out property <[string]> voice-display-list: [];
     in-out property <int> current-voice-index: 0;
 
-    // Settings
+    // ── Settings ──
     in-out property <string> api-url: "";
     in-out property <string> api-key: "";
     in-out property <string> api-model: "";
@@ -79,19 +140,28 @@ export component MainWindow inherits Window {
     in-out property <[string]> device-list: ["默认"];
     in-out property <int> current-device-index: 0;
 
-    // Player bar
+    // ── Player bar ──
     in-out property <float> player-progress: 0;
     in-out property <string> player-current-time: "0:00";
     in-out property <string> player-total-time: "0:00";
     in-out property <float> player-volume: 80;
-    in-out property <string> player-speed-label: "1x";
+    in-out property <string> player-speed-label: "1.5x";
+    in-out property <bool> loop-enabled: false;
+    in-out property <bool> vol-popup-visible: false;
 
-    // Toast
+    // ── Toast ──
     in-out property <string> toast-message: "";
     in-out property <bool> toast-visible: false;
     in-out property <int> toast-type: 0;
 
-    // Callbacks
+    // ── History ──
+    in-out property <string> input-text: "";
+    in-out property <[HistoryItem]> history-list: [];
+    callback select-history(int);
+    callback delete-history(int);
+    callback clear-history();
+
+    // ── Callbacks ──
     callback generate(string);
     callback play-audio();
     callback pause-audio();
@@ -103,61 +173,69 @@ export component MainWindow inherits Window {
     callback filter-changed(int, int);
     callback save-settings();
     callback dismiss-toast();
+    callback toggle-loop();
+    callback export-audio();
 
     VerticalLayout {
         HorizontalLayout {
             vertical-stretch: 1;
 
-            // Sidebar
-            VerticalLayout {
-                width: 7.5rem;
-                padding: 12px;
-                spacing: 4px;
-                Rectangle { height: 16px; }
-                NavItem { icon: @image-url("icons/mic.svg"); label: "合成"; active: current-page == 0; clicked => { current-page = 0; } }
-                NavItem { icon: @image-url("icons/settings.svg"); label: "设置"; active: current-page == 1; clicked => { current-page = 1; } }
-                Rectangle { vertical-stretch: 1; }
-                Text { text: status; font-size: 0.7rem; color: Palette.foreground.transparentize(0.5); wrap: word-wrap; horizontal-alignment: center; }
+            // ── Sidebar ──
+            Rectangle {
+                width: Theme.sidebar-width;
+                background: Theme.surface;
+                VerticalLayout {
+                    padding: Theme.sp-xs;
+                    padding-top: Theme.sp-lg;
+                    spacing: Theme.sp-sm;
+                    alignment: start;
+                    NavItem { icon: @image-url("icons/mic.svg"); label: "合成"; active: current-page == 0; clicked => { current-page = 0; } }
+                    NavItem { icon: @image-url("icons/settings.svg"); label: "设置"; active: current-page == 1; clicked => { current-page = 1; } }
+                    NavItem { icon: @image-url("icons/history.svg"); label: "历史"; active: current-page == 2; clicked => { current-page = 2; } }
+                    Rectangle { vertical-stretch: 1; }
+                }
             }
 
-            Rectangle { width: 1px; background: Palette.border; }
+            // Divider
+            Rectangle { width: 1px; background: Theme.border; }
 
-            // Content area
+            // ── Content area ──
             Rectangle {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
 
-                // Synth page
+                // ── Synth page ──
                 if current-page == 0: VerticalLayout {
-                    padding: 16px;
-                    spacing: 12px;
+                    padding: Theme.sp-lg;
+                    spacing: Theme.sp-md;
 
                     // Text panels
                     HorizontalLayout {
-                        spacing: 12px;
+                        spacing: Theme.sp-md;
                         vertical-stretch: 1;
                         VerticalLayout {
-                            spacing: 4px;
+                            spacing: Theme.sp-xs;
                             horizontal-stretch: 1;
                             HorizontalLayout {
-                                height: 1.75rem;
-                                Text { text: "原文"; font-size: 0.87rem; color: Palette.foreground.transparentize(0.4); vertical-alignment: center; }
+                                height: 1.5rem;
+                                Text { text: "原文"; font-size: Theme.fs-caption; color: Theme.fg-secondary; vertical-alignment: center; }
                                 Rectangle { horizontal-stretch: 1; }
                             }
                             input := TextEdit {
                                 vertical-stretch: 1;
                                 placeholder-text: "在此输入要合成的文本...";
                                 wrap: word-wrap;
+                                text <=> input-text;
                             }
                         }
                         VerticalLayout {
-                            spacing: 4px;
+                            spacing: Theme.sp-xs;
                             horizontal-stretch: 1;
                             HorizontalLayout {
-                                height: 1.75rem;
-                                Text { text: "清洗后"; font-size: 0.87rem; color: Palette.foreground.transparentize(0.4); vertical-alignment: center; }
+                                height: 1.5rem;
+                                Text { text: "清洗后"; font-size: Theme.fs-caption; color: Theme.fg-secondary; vertical-alignment: center; }
                                 Rectangle { horizontal-stretch: 1; }
-                                Text { text: "清洗"; font-size: 0.8rem; vertical-alignment: center; }
+                                Text { text: "清洗"; font-size: Theme.fs-caption; vertical-alignment: center; color: Theme.fg-secondary; }
                                 Switch { checked <=> clean-enabled; }
                             }
                             TextEdit {
@@ -172,22 +250,22 @@ export component MainWindow inherits Window {
 
                     // Voice selection row
                     HorizontalLayout {
-                        spacing: 8px;
-                        Text { text: "语言"; vertical-alignment: center; min-width: 2.5rem; }
+                        spacing: Theme.sp-sm;
+                        Text { text: "语言"; vertical-alignment: center; min-width: 2.5rem; color: Theme.fg; }
                         ComboBox {
                             model: lang-list;
                             current-index <=> current-lang-index;
                             selected => { filter-changed(current-lang-index, current-gender-index); }
                             horizontal-stretch: 1;
                         }
-                        Text { text: "性别"; vertical-alignment: center; min-width: 2.5rem; }
+                        Text { text: "性别"; vertical-alignment: center; min-width: 2.5rem; color: Theme.fg; }
                         ComboBox {
                             model: ["全部", "男", "女"];
                             current-index <=> current-gender-index;
                             selected => { filter-changed(current-lang-index, current-gender-index); }
                             min-width: 70px;
                         }
-                        Text { text: "音色"; vertical-alignment: center; min-width: 2.5rem; }
+                        Text { text: "音色"; vertical-alignment: center; min-width: 2.5rem; color: Theme.fg; }
                         ComboBox {
                             model: voice-display-list;
                             current-index <=> current-voice-index;
@@ -199,31 +277,43 @@ export component MainWindow inherits Window {
                     // Generate button
                     HorizontalLayout {
                         alignment: center;
-                        Button { text: generating ? "生成中..." : "生成"; enabled: !generating; clicked => { generate(input.text); } min-width: 120px; primary: true; }
+                        spacing: Theme.sp-sm;
+                        Button {
+                            text: generating ? "生成中..." : "生成语音";
+                            enabled: !generating;
+                            clicked => { generate(input-text); }
+                            min-width: 140px;
+                            primary: true;
+                        }
+                        Button {
+                            text: "保存音频";
+                            enabled: has-audio && !generating;
+                            clicked => { export-audio(); }
+                        }
                     }
                 }
 
-                // Settings page
+                // ── Settings page ──
                 if current-page == 1: ScrollView {
                     VerticalLayout {
-                        padding: 12px;
-                        spacing: 12px;
+                        padding: Theme.sp-lg;
+                        spacing: Theme.sp-lg;
 
                         GroupBox {
                             title: "LLM 文本清洗";
                             GridLayout {
-                                spacing: 8px;
-                                padding: 4px;
+                                spacing: Theme.sp-md;
+                                padding: Theme.sp-xs;
                                 Row {
-                                    Text { text: "URL"; vertical-alignment: center; }
+                                    Text { text: "URL"; vertical-alignment: center; color: Theme.fg; min-width: Theme.label-col; }
                                     LineEdit { text <=> api-url; }
                                 }
                                 Row {
-                                    Text { text: "Key"; vertical-alignment: center; }
+                                    Text { text: "Key"; vertical-alignment: center; color: Theme.fg; min-width: Theme.label-col; }
                                     LineEdit { text <=> api-key; }
                                 }
                                 Row {
-                                    Text { text: "Model"; vertical-alignment: center; }
+                                    Text { text: "Model"; vertical-alignment: center; color: Theme.fg; min-width: Theme.label-col; }
                                     LineEdit { text <=> api-model; }
                                 }
                             }
@@ -241,8 +331,8 @@ export component MainWindow inherits Window {
                         GroupBox {
                             title: "语音参数";
                             VerticalLayout {
-                                spacing: 8px;
-                                padding: 4px;
+                                spacing: Theme.sp-sm;
+                                padding: Theme.sp-xs;
                                 ParamRow { label: "语速"; param-value <=> rate-value; unit: "%"; }
                                 ParamRow { label: "音调"; param-value <=> pitch-value; unit: "Hz"; }
                                 ParamRow { label: "音量"; param-value <=> volume-value; unit: "%"; }
@@ -252,10 +342,10 @@ export component MainWindow inherits Window {
                         GroupBox {
                             title: "音频设备";
                             VerticalLayout {
-                                padding: 4px;
+                                padding: Theme.sp-xs;
                                 HorizontalLayout {
-                                    spacing: 8px;
-                                    Text { text: "设备"; vertical-alignment: center; min-width: 40px; }
+                                    spacing: Theme.sp-md;
+                                    Text { text: "设备"; vertical-alignment: center; min-width: Theme.label-col; color: Theme.fg; }
                                     ComboBox {
                                         model: device-list;
                                         current-index <=> current-device-index;
@@ -267,26 +357,100 @@ export component MainWindow inherits Window {
 
                         HorizontalLayout {
                             alignment: center;
-                            Button { text: "保存设置"; clicked => { save-settings(); } }
+                            Button { text: "保存设置"; clicked => { save-settings(); } primary: true; }
                         }
 
                         Rectangle { vertical-stretch: 1; }
                     }
                 }
 
-                // Toast notification
+                // ── History page ──
+                if current-page == 2: VerticalLayout {
+                    padding: Theme.sp-lg;
+                    spacing: Theme.sp-md;
+
+                    HorizontalLayout {
+                        Text { text: "合成历史"; font-size: Theme.fs-body; font-weight: 700; color: Theme.fg; vertical-alignment: center; }
+                        Rectangle { horizontal-stretch: 1; }
+                        Button { text: "清空"; clicked => { clear-history(); } }
+                    }
+
+                    if history-list.length == 0: Rectangle {
+                        vertical-stretch: 1;
+                        Text {
+                            text: "暂无历史记录";
+                            font-size: Theme.fs-caption;
+                            color: Theme.fg-secondary;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    if history-list.length > 0: ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: Theme.sp-sm;
+                            for item[idx] in history-list: Rectangle {
+                                height: 56px;
+                                border-radius: Theme.radius-md;
+                                background: row-ta.has-hover ? Theme.control-bg : transparent;
+                                animate background { duration: 150ms; }
+
+                                row-ta := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { select-history(idx); }
+                                }
+
+                                HorizontalLayout {
+                                    padding: Theme.sp-sm;
+                                    spacing: Theme.sp-sm;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 2px;
+                                        alignment: center;
+                                        Text { text: item.title; font-size: Theme.fs-body; color: Theme.fg; overflow: elide; }
+                                        Text { text: item.subtitle; font-size: Theme.fs-caption; color: Theme.fg-secondary; overflow: elide; }
+                                    }
+                                    Rectangle {
+                                        width: 28px;
+                                        height: 28px;
+                                        border-radius: Theme.radius-sm;
+                                        background: del-ta.has-hover ? Theme.control-bg : transparent;
+                                        del-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { delete-history(idx); }
+                                        }
+                                        Image {
+                                            source: @image-url("icons/close.svg");
+                                            width: 14px;
+                                            height: 14px;
+                                            colorize: Theme.fg-secondary;
+                                            x: (parent.width - self.width) / 2;
+                                            y: (parent.height - self.height) / 2;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Toast notification ──
                 if toast-visible: Rectangle {
-                    x: parent.width - self.width - 12px;
-                    y: 12px;
-                    width: 240px;
+                    x: parent.width - self.width - Theme.sp-md;
+                    y: Theme.sp-md;
+                    width: 260px;
                     height: 40px;
-                    border-radius: 6px;
-                    background: toast-type == 2 ? Colors.red.transparentize(0.15) : toast-type == 1 ? Colors.green.transparentize(0.15) : Palette.accent-background;
-                    TouchArea { clicked => { dismiss-toast(); } }
+                    border-radius: Theme.radius-md;
+                    background: toast-type == 2 ? Colors.red.transparentize(0.12) : toast-type == 1 ? Colors.green.transparentize(0.12) : Theme.accent;
+                    drop-shadow-blur: 8px;
+                    drop-shadow-color: Colors.black.transparentize(0.7);
+                    drop-shadow-offset-y: 2px;
+                    TouchArea { clicked => { dismiss-toast(); } mouse-cursor: pointer; }
                     Text {
                         text: toast-message;
                         color: white;
-                        font-size: 0.82rem;
+                        font-size: Theme.fs-caption;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
@@ -294,27 +458,33 @@ export component MainWindow inherits Window {
             }
         }
 
-        // Bottom player bar
+        // ── Bottom player bar ──────────────────────────────────────────────────
         Rectangle {
-            height: 3rem;
-            background: Palette.alternate-background;
-            HorizontalLayout {
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 8px;
+            height: Theme.player-bar-height;
+            background: Theme.surface;
+            Rectangle { height: 1px; width: 100%; y: 0; background: Theme.border; }
 
-                Button {
-                    text: playing ? "⏸" : "▶";
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    padding-left: Theme.sp-lg;
+                    padding-right: Theme.sp-lg;
+                    spacing: Theme.sp-md;
+
+                // Play/Pause — 32x32
+                IconButton {
+                    icon: playing ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
                     enabled: has-audio;
                     clicked => { if (playing) { pause-audio(); } else { play-audio(); } }
-                    max-width: 36px;
                 }
-                Button {
-                    text: "⏹";
+                // Stop — 32x32
+                IconButton {
+                    icon: @image-url("icons/stop.svg");
                     enabled: has-audio;
                     clicked => { stop-audio(); }
-                    max-width: 36px;
                 }
+
+                // Progress slider — fills remaining space
                 Slider {
                     horizontal-stretch: 1;
                     minimum: 0;
@@ -323,25 +493,99 @@ export component MainWindow inherits Window {
                     enabled: has-audio;
                     changed(v) => { seek-audio(v); }
                 }
+
+                // Time
                 Text {
                     text: player-current-time + " / " + player-total-time;
-                    font-size: 0.75rem;
+                    font-size: Theme.fs-caption;
+                    color: Theme.fg-secondary;
                     vertical-alignment: center;
-                    min-width: 80px;
+                    min-width: 72px;
+                    horizontal-alignment: center;
                 }
-                Slider {
-                    width: 80px;
-                    minimum: 0;
-                    maximum: 100;
-                    value <=> player-volume;
-                    enabled: has-audio;
-                    changed(v) => { set-volume(v); }
+
+                // Volume — icon only, slider as vertical popup
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: Theme.radius-sm;
+                    background: vol-ta.has-hover && has-audio ? Theme.control-bg : transparent;
+                    opacity: has-audio ? 1.0 : 0.35;
+                    animate background { duration: 150ms; }
+                    vol-ta := TouchArea {
+                        enabled: has-audio;
+                        mouse-cursor: has-audio ? pointer : default;
+                        clicked => { vol-popup-visible = !vol-popup-visible; }
+                    }
+                    Image {
+                        source: @image-url("icons/volume.svg");
+                        width: Theme.icon-md;
+                        height: Theme.icon-md;
+                        colorize: Theme.fg;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
                 }
-                Button {
-                    text: player-speed-label;
+
+                // Speed — 40x32, same height as icons
+                Rectangle {
+                    width: 40px;
+                    height: 32px;
+                    border-radius: Theme.radius-sm;
+                    background: speed-ta.has-hover && has-audio ? Theme.control-bg : transparent;
+                    animate background { duration: 150ms; }
+                    opacity: has-audio ? 1.0 : 0.35;
+                    speed-ta := TouchArea {
+                        enabled: has-audio;
+                        mouse-cursor: has-audio ? pointer : default;
+                        clicked => { cycle-speed(); }
+                    }
+                    Text {
+                        text: player-speed-label;
+                        font-size: Theme.fs-caption;
+                        font-weight: 600;
+                        color: Theme.fg;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Loop — 32x32
+                IconButton {
+                    icon: @image-url("icons/loop.svg");
                     enabled: has-audio;
-                    clicked => { cycle-speed(); }
-                    max-width: 40px;
+                    active: loop-enabled;
+                    active-color: Theme.accent;
+                    clicked => { toggle-loop(); }
+                }
+            }
+            }
+
+            // Volume vertical popup
+            if vol-popup-visible: Rectangle {
+                x: parent.width - 200px;
+                y: -120px;
+                width: 36px;
+                height: 110px;
+                border-radius: Theme.radius-md;
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border;
+                drop-shadow-blur: 6px;
+                drop-shadow-color: Colors.black.transparentize(0.75);
+
+                VerticalLayout {
+                    padding: Theme.sp-xs;
+                    alignment: center;
+                    Slider {
+                        orientation: vertical;
+                        minimum: 0;
+                        maximum: 100;
+                        value <=> player-volume;
+                        enabled: has-audio;
+                        changed(v) => { set-volume(v); }
+                        height: 90px;
+                    }
                 }
             }
         }
