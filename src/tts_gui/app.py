@@ -60,6 +60,7 @@ class TTSApp:
         self.play_stream = None
         self._result = None
         self._play_done = False
+        self.output_device = None  # None = system default
 
         # Load saved settings
         settings = load_settings()
@@ -73,6 +74,9 @@ class TTSApp:
             self.win.volume_value = settings.get("volume", 0)
             self.win.clean_enabled = settings.get("clean_enabled", True)
 
+        # Populate audio devices
+        self._init_audio_devices(settings.get("device_index", 0))
+
         # Bind callbacks
         self.win.generate = self.on_generate
         self.win.play_audio = self.on_play
@@ -81,6 +85,7 @@ class TTSApp:
         self.win.preview_voice = self.on_preview
         self.win.filter_changed = self.on_filter_changed
         self.win.save_settings = self.on_save_settings
+        self.win.device_changed = self.on_device_changed
 
         self._load_voices_async()
 
@@ -94,9 +99,31 @@ class TTSApp:
             "pitch": self.win.pitch_value,
             "volume": self.win.volume_value,
             "clean_enabled": self.win.clean_enabled,
+            "device_index": self.win.current_device_index,
         }
         save_settings(data)
         self.win.status = "设置已保存"
+
+    def _init_audio_devices(self, saved_idx: int = 0):
+        devices = sd.query_devices()
+        self._output_devices = []  # list of (device_index, name)
+        names = ["系统默认"]
+        for i, d in enumerate(devices):
+            if d["max_output_channels"] > 0:
+                self._output_devices.append(i)
+                names.append(d["name"])
+        self.win.device_list = slint.ListModel(names)
+        if saved_idx < len(names):
+            self.win.current_device_index = saved_idx
+        self.on_device_changed(self.win.current_device_index)
+
+    def on_device_changed(self, idx: int):
+        if idx == 0:
+            self.output_device = None  # system default
+        else:
+            dev_idx = idx - 1
+            if dev_idx < len(self._output_devices):
+                self.output_device = self._output_devices[dev_idx]
 
     def _load_voices_async(self):
         self.win.status = "正在加载语音列表..."
@@ -282,7 +309,8 @@ class TTSApp:
             decoded = miniaudio.decode(data, output_format=miniaudio.SampleFormat.SIGNED16)
             samples = np.frombuffer(decoded.samples, dtype=np.int16).reshape(-1, decoded.nchannels)
             self.play_stream = sd.OutputStream(
-                samplerate=decoded.sample_rate, channels=decoded.nchannels, dtype="int16", blocksize=4096
+                samplerate=decoded.sample_rate, channels=decoded.nchannels, dtype="int16", blocksize=4096,
+                device=self.output_device,
             )
             self.play_stream.start()
             self.win.playing = True

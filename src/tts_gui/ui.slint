@@ -23,11 +23,11 @@ component ParamRow inherits HorizontalLayout {
     in-out property <float> param-value;
     in property <string> unit: "%";
     spacing: 6px;
-    Text { text: label; vertical-alignment: center; min-width: 28px; font-size: 0.85rem; }
+    Text { text: label; vertical-alignment: center; min-width: 28px; font-size: 0.9rem; }
     Slider { minimum: -50; maximum: 50; value <=> param-value; horizontal-stretch: 1; }
     Text {
         text: param-value >= 0 ? "+" + Math.round(param-value) + unit : Math.round(param-value) + unit;
-        vertical-alignment: center; min-width: 46px; font-size: 0.85rem;
+        vertical-alignment: center; min-width: 46px; font-size: 0.9rem;
     }
 }
 
@@ -35,6 +35,7 @@ export component MainWindow inherits Window {
     title: "Edge TTS 语音合成";
     width: 880px;
     height: 580px;
+    default-font-size: 14px;
 
     in-out property <string> status: "就绪";
     in-out property <bool> generating: false;
@@ -56,8 +57,13 @@ export component MainWindow inherits Window {
 
     in-out property <string> api-url: "https://gemini-web2api.588345.xyz/v1";
     in-out property <string> api-key: "KnBxh?2nE4trdJma";
-    in-out property <string> api-model: "gemini-flash";
+    in-out property <string> api-model: "gemini-3.5-flash";
     in-out property <string> clean-prompt: "将文本转换为适合TTS朗读的纯文本：移除markdown格式、语气词、口头禅，使句子通顺，保留核心内容。只输出结果。";
+
+    // Audio device
+    in-out property <[string]> device-list: ["默认"];
+    in-out property <int> current-device-index: 0;
+    callback device-changed(int);
 
     in-out property <int> current-page: 0;
 
@@ -129,21 +135,21 @@ export component MainWindow inherits Window {
             // Voice controls - compact 2 rows
             HorizontalLayout {
                 spacing: 6px;
-                Text { text: "语言"; vertical-alignment: center; font-size: 0.85rem; }
+                Text { text: "语言"; vertical-alignment: center; font-size: 0.9rem; }
                 ComboBox {
                     model: lang-list;
                     current-index <=> current-lang-index;
                     selected => { filter-changed(current-lang-index, current-gender-index); }
                     horizontal-stretch: 1;
                 }
-                Text { text: "性别"; vertical-alignment: center; font-size: 0.85rem; }
+                Text { text: "性别"; vertical-alignment: center; font-size: 0.9rem; }
                 ComboBox {
                     model: ["全部", "男", "女"];
                     current-index <=> current-gender-index;
                     selected => { filter-changed(current-lang-index, current-gender-index); }
                     min-width: 70px;
                 }
-                Text { text: "音色"; vertical-alignment: center; font-size: 0.85rem; }
+                Text { text: "音色"; vertical-alignment: center; font-size: 0.9rem; }
                 ComboBox {
                     model: voice-display-list;
                     current-index <=> current-voice-index;
@@ -215,6 +221,16 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     spacing: 6px;
                     padding: 4px;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: "输出设备"; vertical-alignment: center; min-width: 60px; font-size: 0.9rem; }
+                        ComboBox {
+                            model: device-list;
+                            current-index <=> current-device-index;
+                            selected => { device-changed(current-device-index); }
+                            horizontal-stretch: 1;
+                        }
+                    }
                     ParamRow { label: "语速"; param-value <=> rate-value; unit: "%"; }
                     ParamRow { label: "音调"; param-value <=> pitch-value; unit: "Hz"; }
                     ParamRow { label: "音量"; param-value <=> volume-value; unit: "%"; }
