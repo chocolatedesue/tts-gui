@@ -1,7 +1,7 @@
 import { Button, ComboBox, Slider, VerticalBox, HorizontalBox, TextEdit, Switch, Palette, LineEdit, GroupBox, GridBox, ScrollView } from "std-widgets.slint";
 
 component NavItem inherits Rectangle {
-    in property <string> icon;
+    in property <image> icon;
     in property <string> label;
     in property <bool> active;
     callback clicked();
@@ -13,7 +13,13 @@ component NavItem inherits Rectangle {
     VerticalLayout {
         alignment: center;
         spacing: 4px;
-        Text { text: icon; font-size: 1.4rem; horizontal-alignment: center; }
+        Image {
+            source: icon;
+            width: 24px;
+            height: 24px;
+            colorize: active ? Palette.accent-foreground : Palette.foreground;
+            horizontal-alignment: center;
+        }
         Text {
             text: label;
             font-size: 0.75rem;
@@ -107,8 +113,8 @@ export component MainWindow inherits Window {
                 padding: 12px;
                 spacing: 4px;
                 Rectangle { height: 16px; }
-                NavItem { icon: "🎙️"; label: "合成"; active: current-page == 0; clicked => { current-page = 0; } }
-                NavItem { icon: "⚙️"; label: "设置"; active: current-page == 1; clicked => { current-page = 1; } }
+                NavItem { icon: @image-url("icons/mic.svg"); label: "合成"; active: current-page == 0; clicked => { current-page = 0; } }
+                NavItem { icon: @image-url("icons/settings.svg"); label: "设置"; active: current-page == 1; clicked => { current-page = 1; } }
                 Rectangle { vertical-stretch: 1; }
                 Text { text: status; font-size: 0.7rem; color: Palette.foreground.transparentize(0.5); wrap: word-wrap; horizontal-alignment: center; }
             }
