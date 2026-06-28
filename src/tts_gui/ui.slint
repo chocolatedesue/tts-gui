@@ -1,0 +1,97 @@
+import { Button, ComboBox, Slider, VerticalBox, HorizontalBox, TextEdit, Palette } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "Edge TTS 语音合成";
+    width: 560px;
+    height: 500px;
+
+    in-out property <string> status: "就绪";
+    in-out property <int> current-voice-index: 0;
+    in-out property <float> rate-value: 0;
+    in-out property <bool> generating: false;
+    in-out property <bool> has-audio: false;
+    in-out property <bool> playing: false;
+
+    callback generate(string, int, float);
+    callback play-audio();
+    callback stop-audio();
+    callback save-audio();
+
+    VerticalBox {
+        Text {
+            text: "Edge TTS 语音合成";
+            font-size: 1.25rem;
+            horizontal-alignment: center;
+            font-weight: 700;
+        }
+
+        input := TextEdit {
+            vertical-stretch: 1;
+            font-size: 0.9rem;
+            text: "";
+            placeholder-text: "在此输入要合成的文本...";
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: center;
+            Text { text: "语音"; vertical-alignment: center; }
+            voice-select := ComboBox {
+                model: ["云希 (男-阳光)", "晓晓 (女-温暖)", "云扬 (男-专业)", "云健 (男-激情)", "晓伊 (女-活泼)"];
+                current-index <=> current-voice-index;
+                min-width: 180px;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: center;
+            Text { text: "语速"; vertical-alignment: center; }
+            rate-slider := Slider {
+                minimum: -50;
+                maximum: 50;
+                value <=> rate-value;
+                min-width: 200px;
+            }
+            Text {
+                text: rate-value >= 0 ? "+" + Math.round(rate-value) + "%" : Math.round(rate-value) + "%";
+                vertical-alignment: center;
+                min-width: 48px;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: center;
+
+            Button {
+                text: generating ? "生成中..." : "🎙 生成";
+                enabled: !generating;
+                clicked => { generate(input.text, current-voice-index, rate-value); }
+            }
+
+            Button {
+                text: playing ? "⏹ 停止" : "▶ 播放";
+                enabled: has-audio && !generating;
+                clicked => {
+                    if (playing) { stop-audio(); }
+                    else { play-audio(); }
+                }
+            }
+
+            Button {
+                text: "💾 保存";
+                enabled: has-audio && !generating;
+                clicked => { save-audio(); }
+            }
+        }
+
+        Text {
+            text: status;
+            horizontal-alignment: center;
+            color: Palette.foreground.transparentize(0.4);
+            font-size: 0.85rem;
+        }
+    }
+}

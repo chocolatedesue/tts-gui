@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+*.mp3
+*.png
+*.egg-info/
+logs/
+.agents/
+uv.lock
+skills-lock.json

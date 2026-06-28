@@ -1,0 +1,44 @@
+[project]
+name = "tts-gui"
+version = "0.1.0"
+description = "Edge TTS GUI with Slint"
+requires-python = ">=3.13"
+license = "MIT"
+dependencies = [
+    "edge-tts>=7.2.8",
+    "miniaudio>=1.71",
+    "numpy>=2.5.0",
+    "slint>=1.17.0b2",
+    "sounddevice>=0.5.5",
+]
+
+[dependency-groups]
+dev = [
+    "briefcase>=0.4.2",
+    "briefcasex-slint>=1.17.0b2",
+]
+
+[tool.uv]
+index-url = "https://mirrors.bfsu.edu.cn/pypi/web/simple"
+
+[tool.briefcase]
+project_name = "TTS GUI"
+bundle = "com.tts"
+version = "0.1.0"
+license = "MIT"
+
+[tool.briefcase.app.tts-gui]
+formal_name = "Edge TTS"
+description = "Edge TTS 语音合成"
+sources = ["src/tts_gui"]
+requires = [
+    "slint>=1.17.0b2",
+    "edge-tts>=7.2.8",
+]
+
+[tool.briefcase.app.tts-gui.macOS]
+universal_build = false
+requires = [
+    "slint>=1.17.0b2",
+    "edge-tts>=7.2.8",
+]
