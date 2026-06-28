@@ -23,19 +23,19 @@ component ParamRow inherits HorizontalLayout {
     in-out property <float> param-value;
     in property <string> unit: "%";
     spacing: 6px;
-    Text { text: label; vertical-alignment: center; min-width: 28px; font-size: 0.9rem; }
+    Text { text: label; vertical-alignment: center; min-width: 28px; }
     Slider { minimum: -50; maximum: 50; value <=> param-value; horizontal-stretch: 1; }
     Text {
         text: param-value >= 0 ? "+" + Math.round(param-value) + unit : Math.round(param-value) + unit;
-        vertical-alignment: center; min-width: 46px; font-size: 0.9rem;
+        vertical-alignment: center; min-width: 46px;
     }
 }
 
 export component MainWindow inherits Window {
     title: "Edge TTS 语音合成";
-    width: 880px;
-    height: 580px;
-    default-font-size: 14px;
+    width: 900px;
+    height: 600px;
+    default-font-size: 15px;
 
     in-out property <string> status: "就绪";
     in-out property <bool> generating: false;
@@ -103,10 +103,13 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     spacing: 2px;
                     horizontal-stretch: 1;
-                    Text { text: "原文"; font-size: 0.8rem; color: Palette.foreground.transparentize(0.4); }
+                    HorizontalLayout {
+                        height: 26px;
+                        Text { text: "原文"; font-size: 0.87rem; color: Palette.foreground.transparentize(0.4); vertical-alignment: center; }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
                     input := TextEdit {
                         vertical-stretch: 1;
-                        font-size: 0.88rem;
                         placeholder-text: "在此输入要合成的文本...";
                         wrap: word-wrap;
                     }
@@ -116,14 +119,14 @@ export component MainWindow inherits Window {
                     spacing: 2px;
                     horizontal-stretch: 1;
                     HorizontalLayout {
-                        Text { text: "清洗后"; font-size: 0.8rem; color: Palette.foreground.transparentize(0.4); vertical-alignment: center; }
+                        height: 26px;
+                        Text { text: "清洗后"; font-size: 0.87rem; color: Palette.foreground.transparentize(0.4); vertical-alignment: center; }
                         Rectangle { horizontal-stretch: 1; }
-                        Text { text: "清洗"; font-size: 0.75rem; vertical-alignment: center; }
+                        Text { text: "清洗"; font-size: 0.8rem; vertical-alignment: center; }
                         Switch { checked <=> clean-enabled; }
                     }
                     TextEdit {
                         vertical-stretch: 1;
-                        font-size: 0.88rem;
                         text <=> cleaned-text;
                         placeholder-text: "清洗后的文本...";
                         wrap: word-wrap;
@@ -135,21 +138,21 @@ export component MainWindow inherits Window {
             // Voice controls - compact 2 rows
             HorizontalLayout {
                 spacing: 6px;
-                Text { text: "语言"; vertical-alignment: center; font-size: 0.9rem; }
+                Text { text: "语言"; vertical-alignment: center; }
                 ComboBox {
                     model: lang-list;
                     current-index <=> current-lang-index;
                     selected => { filter-changed(current-lang-index, current-gender-index); }
                     horizontal-stretch: 1;
                 }
-                Text { text: "性别"; vertical-alignment: center; font-size: 0.9rem; }
+                Text { text: "性别"; vertical-alignment: center; }
                 ComboBox {
                     model: ["全部", "男", "女"];
                     current-index <=> current-gender-index;
                     selected => { filter-changed(current-lang-index, current-gender-index); }
                     min-width: 70px;
                 }
-                Text { text: "音色"; vertical-alignment: center; font-size: 0.9rem; }
+                Text { text: "音色"; vertical-alignment: center; }
                 ComboBox {
                     model: voice-display-list;
                     current-index <=> current-voice-index;
