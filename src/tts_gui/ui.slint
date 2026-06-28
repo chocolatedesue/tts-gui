@@ -1,21 +1,33 @@
-import { Button, ComboBox, Slider, VerticalBox, HorizontalBox, TextEdit, Palette } from "std-widgets.slint";
+import { Button, ComboBox, Slider, VerticalBox, HorizontalBox, TextEdit, ListView, Palette, ScrollView } from "std-widgets.slint";
 
 export component MainWindow inherits Window {
     title: "Edge TTS 语音合成";
-    width: 560px;
-    height: 500px;
+    width: 620px;
+    height: 620px;
 
     in-out property <string> status: "就绪";
-    in-out property <int> current-voice-index: 0;
-    in-out property <float> rate-value: 0;
     in-out property <bool> generating: false;
     in-out property <bool> has-audio: false;
     in-out property <bool> playing: false;
 
-    callback generate(string, int, float);
+    // Voice selection
+    in-out property <[string]> voice-display-list: [];
+    in-out property <int> current-voice-index: 0;
+    in-out property <int> current-lang-index: 0;
+    in-out property <int> current-gender-index: 0;
+    in-out property <[string]> lang-list: ["全部"];
+
+    // TTS params
+    in-out property <float> rate-value: 0;
+    in-out property <float> pitch-value: 0;
+    in-out property <float> volume-value: 0;
+
+    callback generate(string);
     callback play-audio();
     callback stop-audio();
     callback save-audio();
+    callback preview-voice();
+    callback filter-changed(int, int);
 
     VerticalBox {
         Text {
@@ -33,34 +45,92 @@ export component MainWindow inherits Window {
             wrap: word-wrap;
         }
 
+        // Voice filter row
         HorizontalLayout {
             spacing: 8px;
-            alignment: center;
-            Text { text: "语音"; vertical-alignment: center; }
-            voice-select := ComboBox {
-                model: ["云希 (男-阳光)", "晓晓 (女-温暖)", "云扬 (男-专业)", "云健 (男-激情)", "晓伊 (女-活泼)"];
-                current-index <=> current-voice-index;
-                min-width: 180px;
+            alignment: stretch;
+
+            Text { text: "语言"; vertical-alignment: center; }
+            lang-cb := ComboBox {
+                model: lang-list;
+                current-index <=> current-lang-index;
+                selected => { filter-changed(current-lang-index, current-gender-index); }
+                horizontal-stretch: 1;
+            }
+
+            Text { text: "性别"; vertical-alignment: center; }
+            gender-cb := ComboBox {
+                model: ["全部", "男", "女"];
+                current-index <=> current-gender-index;
+                selected => { filter-changed(current-lang-index, current-gender-index); }
             }
         }
 
+        // Voice selection row
         HorizontalLayout {
             spacing: 8px;
-            alignment: center;
-            Text { text: "语速"; vertical-alignment: center; }
-            rate-slider := Slider {
-                minimum: -50;
-                maximum: 50;
+            alignment: stretch;
+
+            Text { text: "音色"; vertical-alignment: center; }
+            voice-cb := ComboBox {
+                model: voice-display-list;
+                current-index <=> current-voice-index;
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "👂 试听";
+                enabled: !generating;
+                clicked => { preview-voice(); }
+            }
+        }
+
+        // Rate
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: "语速"; vertical-alignment: center; min-width: 32px; }
+            Slider {
+                minimum: -50; maximum: 50;
                 value <=> rate-value;
-                min-width: 200px;
+                horizontal-stretch: 1;
             }
             Text {
                 text: rate-value >= 0 ? "+" + Math.round(rate-value) + "%" : Math.round(rate-value) + "%";
-                vertical-alignment: center;
-                min-width: 48px;
+                vertical-alignment: center; min-width: 48px;
             }
         }
 
+        // Pitch
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: "音调"; vertical-alignment: center; min-width: 32px; }
+            Slider {
+                minimum: -50; maximum: 50;
+                value <=> pitch-value;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: pitch-value >= 0 ? "+" + Math.round(pitch-value) + "Hz" : Math.round(pitch-value) + "Hz";
+                vertical-alignment: center; min-width: 52px;
+            }
+        }
+
+        // Volume
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: "音量"; vertical-alignment: center; min-width: 32px; }
+            Slider {
+                minimum: -50; maximum: 50;
+                value <=> volume-value;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: volume-value >= 0 ? "+" + Math.round(volume-value) + "%" : Math.round(volume-value) + "%";
+                vertical-alignment: center; min-width: 48px;
+            }
+        }
+
+        // Action buttons
         HorizontalLayout {
             spacing: 12px;
             alignment: center;
@@ -68,7 +138,7 @@ export component MainWindow inherits Window {
             Button {
                 text: generating ? "生成中..." : "🎙 生成";
                 enabled: !generating;
-                clicked => { generate(input.text, current-voice-index, rate-value); }
+                clicked => { generate(input.text); }
             }
 
             Button {
