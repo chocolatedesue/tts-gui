@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
     "edge-tts>=7.2.8",
+    "httpx>=0.28.1",
     "miniaudio>=1.71",
     "numpy>=2.5.0",
     "slint>=1.17.0b2",
@@ -34,6 +35,10 @@ sources = ["src/tts_gui"]
 requires = [
     "slint>=1.17.0b2",
     "edge-tts>=7.2.8",
+    "miniaudio>=1.71",
+    "sounddevice>=0.5.5",
+    "numpy>=2.0",
+    "httpx>=0.28",
 ]
 
 [tool.briefcase.app.tts-gui.macOS]
@@ -41,4 +46,8 @@ universal_build = false
 requires = [
     "slint>=1.17.0b2",
     "edge-tts>=7.2.8",
+    "miniaudio>=1.71",
+    "sounddevice>=0.5.5",
+    "numpy>=2.0",
+    "httpx>=0.28",
 ]

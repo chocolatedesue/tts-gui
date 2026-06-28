@@ -1,26 +1,65 @@
-import { Button, ComboBox, Slider, VerticalBox, HorizontalBox, TextEdit, ListView, Palette, ScrollView } from "std-widgets.slint";
+import { Button, ComboBox, Slider, VerticalBox, HorizontalBox, TextEdit, Switch, Palette, LineEdit, GroupBox, GridBox } from "std-widgets.slint";
+
+component NavButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback clicked();
+    height: 36px;
+    background: active ? Palette.accent-background : transparent;
+    border-radius: 5px;
+    TouchArea { clicked => { root.clicked(); } mouse-cursor: pointer; }
+    Text {
+        text: label;
+        color: active ? Palette.accent-foreground : Palette.foreground;
+        font-size: 0.85rem;
+        font-weight: active ? 700 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component ParamRow inherits HorizontalLayout {
+    in property <string> label;
+    in-out property <float> param-value;
+    in property <string> unit: "%";
+    spacing: 6px;
+    Text { text: label; vertical-alignment: center; min-width: 28px; font-size: 0.85rem; }
+    Slider { minimum: -50; maximum: 50; value <=> param-value; horizontal-stretch: 1; }
+    Text {
+        text: param-value >= 0 ? "+" + Math.round(param-value) + unit : Math.round(param-value) + unit;
+        vertical-alignment: center; min-width: 46px; font-size: 0.85rem;
+    }
+}
 
 export component MainWindow inherits Window {
     title: "Edge TTS 语音合成";
-    width: 620px;
-    height: 620px;
+    width: 880px;
+    height: 580px;
 
     in-out property <string> status: "就绪";
     in-out property <bool> generating: false;
     in-out property <bool> has-audio: false;
     in-out property <bool> playing: false;
 
-    // Voice selection
     in-out property <[string]> voice-display-list: [];
     in-out property <int> current-voice-index: 0;
     in-out property <int> current-lang-index: 0;
     in-out property <int> current-gender-index: 0;
     in-out property <[string]> lang-list: ["全部"];
 
-    // TTS params
     in-out property <float> rate-value: 0;
     in-out property <float> pitch-value: 0;
     in-out property <float> volume-value: 0;
+
+    in-out property <bool> clean-enabled: true;
+    in-out property <string> cleaned-text: "";
+
+    in-out property <string> api-url: "https://gemini-web2api.588345.xyz/v1";
+    in-out property <string> api-key: "KnBxh?2nE4trdJma";
+    in-out property <string> api-model: "gemini-flash";
+    in-out property <string> clean-prompt: "将文本转换为适合TTS朗读的纯文本：移除markdown格式、语气词、口头禅，使句子通顺，保留核心内容。只输出结果。";
+
+    in-out property <int> current-page: 0;
 
     callback generate(string);
     callback play-audio();
@@ -28,140 +67,166 @@ export component MainWindow inherits Window {
     callback save-audio();
     callback preview-voice();
     callback filter-changed(int, int);
+    callback save-settings();
 
-    VerticalBox {
-        Text {
-            text: "Edge TTS 语音合成";
-            font-size: 1.25rem;
-            horizontal-alignment: center;
-            font-weight: 700;
+    HorizontalLayout {
+        // Nav
+        VerticalLayout {
+            width: 80px;
+            padding: 6px;
+            spacing: 4px;
+            Rectangle { height: 4px; }
+            NavButton { label: "🎙 合成"; active: current-page == 0; clicked => { current-page = 0; } }
+            NavButton { label: "⚙ 设置"; active: current-page == 1; clicked => { current-page = 1; } }
+            Rectangle { vertical-stretch: 1; }
+            Text { text: status; font-size: 0.7rem; color: Palette.foreground.transparentize(0.5); wrap: word-wrap; horizontal-alignment: center; }
         }
 
-        input := TextEdit {
-            vertical-stretch: 1;
-            font-size: 0.9rem;
-            text: "";
-            placeholder-text: "在此输入要合成的文本...";
-            wrap: word-wrap;
-        }
+        Rectangle { width: 1px; background: Palette.border; }
 
-        // Voice filter row
-        HorizontalLayout {
+        // === Synthesize Page ===
+        if current-page == 0: VerticalLayout {
+            padding: 12px;
             spacing: 8px;
-            alignment: stretch;
 
-            Text { text: "语言"; vertical-alignment: center; }
-            lang-cb := ComboBox {
-                model: lang-list;
-                current-index <=> current-lang-index;
-                selected => { filter-changed(current-lang-index, current-gender-index); }
-                horizontal-stretch: 1;
-            }
+            // Text panels
+            HorizontalLayout {
+                spacing: 10px;
+                vertical-stretch: 1;
 
-            Text { text: "性别"; vertical-alignment: center; }
-            gender-cb := ComboBox {
-                model: ["全部", "男", "女"];
-                current-index <=> current-gender-index;
-                selected => { filter-changed(current-lang-index, current-gender-index); }
-            }
-        }
+                VerticalLayout {
+                    spacing: 2px;
+                    horizontal-stretch: 1;
+                    Text { text: "原文"; font-size: 0.8rem; color: Palette.foreground.transparentize(0.4); }
+                    input := TextEdit {
+                        vertical-stretch: 1;
+                        font-size: 0.88rem;
+                        placeholder-text: "在此输入要合成的文本...";
+                        wrap: word-wrap;
+                    }
+                }
 
-        // Voice selection row
-        HorizontalLayout {
-            spacing: 8px;
-            alignment: stretch;
-
-            Text { text: "音色"; vertical-alignment: center; }
-            voice-cb := ComboBox {
-                model: voice-display-list;
-                current-index <=> current-voice-index;
-                horizontal-stretch: 1;
-            }
-
-            Button {
-                text: "👂 试听";
-                enabled: !generating;
-                clicked => { preview-voice(); }
-            }
-        }
-
-        // Rate
-        HorizontalLayout {
-            spacing: 8px;
-            Text { text: "语速"; vertical-alignment: center; min-width: 32px; }
-            Slider {
-                minimum: -50; maximum: 50;
-                value <=> rate-value;
-                horizontal-stretch: 1;
-            }
-            Text {
-                text: rate-value >= 0 ? "+" + Math.round(rate-value) + "%" : Math.round(rate-value) + "%";
-                vertical-alignment: center; min-width: 48px;
-            }
-        }
-
-        // Pitch
-        HorizontalLayout {
-            spacing: 8px;
-            Text { text: "音调"; vertical-alignment: center; min-width: 32px; }
-            Slider {
-                minimum: -50; maximum: 50;
-                value <=> pitch-value;
-                horizontal-stretch: 1;
-            }
-            Text {
-                text: pitch-value >= 0 ? "+" + Math.round(pitch-value) + "Hz" : Math.round(pitch-value) + "Hz";
-                vertical-alignment: center; min-width: 52px;
-            }
-        }
-
-        // Volume
-        HorizontalLayout {
-            spacing: 8px;
-            Text { text: "音量"; vertical-alignment: center; min-width: 32px; }
-            Slider {
-                minimum: -50; maximum: 50;
-                value <=> volume-value;
-                horizontal-stretch: 1;
-            }
-            Text {
-                text: volume-value >= 0 ? "+" + Math.round(volume-value) + "%" : Math.round(volume-value) + "%";
-                vertical-alignment: center; min-width: 48px;
-            }
-        }
-
-        // Action buttons
-        HorizontalLayout {
-            spacing: 12px;
-            alignment: center;
-
-            Button {
-                text: generating ? "生成中..." : "🎙 生成";
-                enabled: !generating;
-                clicked => { generate(input.text); }
-            }
-
-            Button {
-                text: playing ? "⏹ 停止" : "▶ 播放";
-                enabled: has-audio && !generating;
-                clicked => {
-                    if (playing) { stop-audio(); }
-                    else { play-audio(); }
+                VerticalLayout {
+                    spacing: 2px;
+                    horizontal-stretch: 1;
+                    HorizontalLayout {
+                        Text { text: "清洗后"; font-size: 0.8rem; color: Palette.foreground.transparentize(0.4); vertical-alignment: center; }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text { text: "清洗"; font-size: 0.75rem; vertical-alignment: center; }
+                        Switch { checked <=> clean-enabled; }
+                    }
+                    TextEdit {
+                        vertical-stretch: 1;
+                        font-size: 0.88rem;
+                        text <=> cleaned-text;
+                        placeholder-text: "清洗后的文本...";
+                        wrap: word-wrap;
+                        read-only: true;
+                    }
                 }
             }
 
-            Button {
-                text: "💾 保存";
-                enabled: has-audio && !generating;
-                clicked => { save-audio(); }
+            // Voice controls - compact 2 rows
+            HorizontalLayout {
+                spacing: 6px;
+                Text { text: "语言"; vertical-alignment: center; font-size: 0.85rem; }
+                ComboBox {
+                    model: lang-list;
+                    current-index <=> current-lang-index;
+                    selected => { filter-changed(current-lang-index, current-gender-index); }
+                    horizontal-stretch: 1;
+                }
+                Text { text: "性别"; vertical-alignment: center; font-size: 0.85rem; }
+                ComboBox {
+                    model: ["全部", "男", "女"];
+                    current-index <=> current-gender-index;
+                    selected => { filter-changed(current-lang-index, current-gender-index); }
+                    min-width: 70px;
+                }
+                Text { text: "音色"; vertical-alignment: center; font-size: 0.85rem; }
+                ComboBox {
+                    model: voice-display-list;
+                    current-index <=> current-voice-index;
+                    horizontal-stretch: 2;
+                }
+                Button { text: "👂"; enabled: !generating; clicked => { preview-voice(); } max-width: 36px; }
+            }
+
+            // Params - single row with 3 sliders
+            HorizontalLayout {
+                spacing: 12px;
+                ParamRow { label: "速"; param-value <=> rate-value; unit: "%"; horizontal-stretch: 1; }
+                ParamRow { label: "调"; param-value <=> pitch-value; unit: "Hz"; horizontal-stretch: 1; }
+                ParamRow { label: "量"; param-value <=> volume-value; unit: "%"; horizontal-stretch: 1; }
+            }
+
+            // Buttons
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: center;
+                Button { text: generating ? "生成中..." : "🎙 生成"; enabled: !generating; clicked => { generate(input.text); } }
+                Button { text: playing ? "⏹ 停止" : "▶ 播放"; enabled: has-audio && !generating; clicked => { if (playing) { stop-audio(); } else { play-audio(); } } }
+                Button { text: "💾 保存"; enabled: has-audio && !generating; clicked => { save-audio(); } }
             }
         }
 
-        Text {
-            text: status;
-            horizontal-alignment: center;
-            color: Palette.foreground.transparentize(0.4);
-            font-size: 0.85rem;
+        // === Settings Page ===
+        if current-page == 1: VerticalLayout {
+            padding: 12px;
+            spacing: 12px;
+
+            Text { text: "设置"; font-size: 1.1rem; font-weight: 700; }
+
+            GroupBox {
+                title: "LLM 文本清洗 (OpenAI 兼容)";
+                VerticalLayout {
+                    spacing: 8px;
+                    padding: 4px;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: "URL"; vertical-alignment: center; min-width: 50px; font-size: 0.85rem; }
+                        LineEdit { text <=> api-url; horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: "Key"; vertical-alignment: center; min-width: 50px; font-size: 0.85rem; }
+                        LineEdit { text <=> api-key; horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: "Model"; vertical-alignment: center; min-width: 50px; font-size: 0.85rem; }
+                        LineEdit { text <=> api-model; horizontal-stretch: 1; }
+                    }
+                }
+            }
+
+            GroupBox {
+                title: "清洗 Prompt 模板";
+                TextEdit {
+                    height: 80px;
+                    text <=> clean-prompt;
+                    wrap: word-wrap;
+                    font-size: 0.82rem;
+                }
+            }
+
+            GroupBox {
+                title: "默认 TTS 参数";
+                VerticalLayout {
+                    spacing: 6px;
+                    padding: 4px;
+                    ParamRow { label: "语速"; param-value <=> rate-value; unit: "%"; }
+                    ParamRow { label: "音调"; param-value <=> pitch-value; unit: "Hz"; }
+                    ParamRow { label: "音量"; param-value <=> volume-value; unit: "%"; }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                Button { text: "💾 保存设置"; clicked => { save-settings(); } }
+            }
+
+            Rectangle { vertical-stretch: 1; }
         }
     }
 }

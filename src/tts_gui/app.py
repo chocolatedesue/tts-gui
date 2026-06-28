@@ -1,18 +1,51 @@
 import asyncio
 import io
-import subprocess
-import sys
+import json
 import threading
 from datetime import timedelta
 from pathlib import Path
 
 import edge_tts
+import httpx
 import miniaudio
 import numpy as np
 import sounddevice as sd
 import slint
 
 GENDER_MAP = {"全部": None, "男": "Male", "女": "Female"}
+
+DEFAULT_CLEAN_PROMPT = "将文本转换为适合TTS朗读的纯文本：移除markdown格式、语气词、口头禅，使句子通顺，保留核心内容。只输出结果。"
+
+SETTINGS_FILE = Path.home() / ".config" / "tts-gui" / "settings.json"
+
+
+def load_settings() -> dict:
+    if SETTINGS_FILE.exists():
+        return json.loads(SETTINGS_FILE.read_text())
+    return {}
+
+
+def save_settings(data: dict):
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def clean_text_with_llm(text: str, base_url: str, api_key: str, model: str, prompt: str) -> str:
+    resp = httpx.post(
+        f"{base_url}/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={
+            "model": model,
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": text},
+            ],
+            "temperature": 0.3,
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()
 
 
 class TTSApp:
@@ -26,6 +59,19 @@ class TTSApp:
         self.audio_buf = bytearray()
         self.play_stream = None
         self._result = None
+        self._play_done = False
+
+        # Load saved settings
+        settings = load_settings()
+        if settings:
+            self.win.api_url = settings.get("api_url", self.win.api_url)
+            self.win.api_key = settings.get("api_key", self.win.api_key)
+            self.win.api_model = settings.get("api_model", self.win.api_model)
+            self.win.clean_prompt = settings.get("clean_prompt", self.win.clean_prompt)
+            self.win.rate_value = settings.get("rate", 0)
+            self.win.pitch_value = settings.get("pitch", 0)
+            self.win.volume_value = settings.get("volume", 0)
+            self.win.clean_enabled = settings.get("clean_enabled", True)
 
         # Bind callbacks
         self.win.generate = self.on_generate
@@ -34,9 +80,23 @@ class TTSApp:
         self.win.save_audio = self.on_save
         self.win.preview_voice = self.on_preview
         self.win.filter_changed = self.on_filter_changed
+        self.win.save_settings = self.on_save_settings
 
-        # Load voices on startup
         self._load_voices_async()
+
+    def on_save_settings(self):
+        data = {
+            "api_url": self.win.api_url,
+            "api_key": self.win.api_key,
+            "api_model": self.win.api_model,
+            "clean_prompt": self.win.clean_prompt,
+            "rate": self.win.rate_value,
+            "pitch": self.win.pitch_value,
+            "volume": self.win.volume_value,
+            "clean_enabled": self.win.clean_enabled,
+        }
+        save_settings(data)
+        self.win.status = "设置已保存"
 
     def _load_voices_async(self):
         self.win.status = "正在加载语音列表..."
@@ -61,7 +121,13 @@ class TTSApp:
             if self._result[0] == "voices_loaded":
                 langs = sorted(set(v["Locale"] for v in self.all_voices))
                 self.win.lang_list = slint.ListModel(["全部"] + langs)
-                self._apply_filter(0, 0)
+                # Default to zh-CN
+                try:
+                    zh_idx = (["全部"] + langs).index("zh-CN")
+                    self.win.current_lang_index = zh_idx
+                except ValueError:
+                    zh_idx = 0
+                self._apply_filter(zh_idx, 0)
                 self.win.status = f"已加载 {len(self.all_voices)} 个语音"
             else:
                 self.win.status = f"加载失败: {self._result[1]}"
@@ -127,13 +193,57 @@ class TTSApp:
             return
         self.win.generating = True
         self.win.has_audio = False
-        self.win.status = "正在生成..."
-        self._run_tts(text, "generated")
+        self.win.cleaned_text = ""
 
+        if self.win.clean_enabled:
+            self.win.status = "正在清洗文本..."
+            self._result = None
+
+            api_url = self.win.api_url
+            api_key = self.win.api_key
+            api_model = self.win.api_model
+            prompt = self.win.clean_prompt
+
+            def clean_worker():
+                try:
+                    cleaned = clean_text_with_llm(text, api_url, api_key, api_model, prompt)
+                    self._result = ("cleaned", cleaned)
+                except Exception as e:
+                    self._result = ("clean_err", str(e))
+
+            threading.Thread(target=clean_worker, daemon=True).start()
+
+            def poll_clean():
+                if self._result is None:
+                    return
+                clean_timer.stop()
+                if self._result[0] == "cleaned":
+                    cleaned = self._result[1]
+                    self.win.cleaned_text = cleaned
+                    self.win.status = "正在生成语音..."
+                    self._result = None
+                    self._run_tts(cleaned, "generated")
+                    self._start_gen_poll()
+                else:
+                    self.win.status = f"清洗失败: {self._result[1]}，使用原文"
+                    self.win.cleaned_text = text
+                    self._result = None
+                    self._run_tts(text, "generated")
+                    self._start_gen_poll()
+
+            clean_timer = slint.Timer()
+            clean_timer.start(slint.TimerMode.Repeated, timedelta(milliseconds=200), poll_clean)
+        else:
+            self.win.cleaned_text = text
+            self.win.status = "正在生成语音..."
+            self._run_tts(text, "generated")
+            self._start_gen_poll()
+
+    def _start_gen_poll(self):
         def poll():
             if self._result is None:
                 return
-            timer.stop()
+            gen_timer.stop()
             if self._result[0] == "generated":
                 self.audio_buf[:] = self._result[1]
                 self.win.has_audio = True
@@ -143,8 +253,8 @@ class TTSApp:
             self.win.generating = False
             self._result = None
 
-        timer = slint.Timer()
-        timer.start(slint.TimerMode.Repeated, timedelta(milliseconds=200), poll)
+        gen_timer = slint.Timer()
+        gen_timer.start(slint.TimerMode.Repeated, timedelta(milliseconds=200), poll)
 
     def on_preview(self):
         self.win.generating = True
@@ -176,6 +286,7 @@ class TTSApp:
             )
             self.play_stream.start()
             self.win.playing = True
+            self._play_done = False
 
             def play_worker():
                 stream = self.play_stream
@@ -183,9 +294,19 @@ class TTSApp:
                     if stream is None or not stream.active:
                         break
                     stream.write(samples[i : i + 4096])
-                self.win.playing = False
+                self._play_done = True
 
             threading.Thread(target=play_worker, daemon=True).start()
+
+            # Poll for playback completion on main thread
+            def poll_play():
+                if not self._play_done:
+                    return
+                play_timer.stop()
+                self.win.playing = False
+
+            play_timer = slint.Timer()
+            play_timer.start(slint.TimerMode.Repeated, timedelta(milliseconds=300), poll_play)
         except Exception as e:
             self.win.status = f"播放错误: {e}"
 
@@ -205,18 +326,27 @@ class TTSApp:
             return
 
         def do_save():
-            import tkinter as tk
-            from tkinter import filedialog
+            import subprocess, sys
+            if sys.platform == "darwin":
+                # Use osascript for file dialog (thread-safe on macOS)
+                script = 'tell application "System Events" to set f to POSIX path of (choose file name with prompt "保存语音文件" default name "tts_output.mp3")'
+                r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+                path = r.stdout.strip()
+            else:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk()
+                root.withdraw()
+                path = filedialog.asksaveasfilename(
+                    defaultextension=".mp3",
+                    filetypes=[("MP3 文件", "*.mp3")],
+                    initialfile="tts_output.mp3",
+                )
+                root.destroy()
 
-            root = tk.Tk()
-            root.withdraw()
-            path = filedialog.asksaveasfilename(
-                defaultextension=".mp3",
-                filetypes=[("MP3 文件", "*.mp3"), ("所有文件", "*.*")],
-                initialfile="tts_output.mp3",
-            )
-            root.destroy()
             if path:
+                if not path.endswith(".mp3"):
+                    path += ".mp3"
                 with open(path, "wb") as f:
                     f.write(self.audio_buf)
                 self.win.status = f"已保存: {path}"
